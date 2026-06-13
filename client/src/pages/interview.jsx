@@ -39,7 +39,7 @@ const questionBank = {
   ],
 };
 
-function Interview() {
+function interview() {
   const params = new URLSearchParams(window.location.search);
   const role = params.get("role") || "java";
   const questions = questionBank[role] || questionBank["java"];
