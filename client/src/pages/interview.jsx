@@ -37,6 +37,7 @@ const questionBank = {
     "Explain regression analysis and when to use it.",
     "What are window functions in SQL? Give examples.",
   ],
+  
 };
 
 function Interview() {
