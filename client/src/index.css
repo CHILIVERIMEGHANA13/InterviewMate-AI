@@ -1,0 +1,17 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: black;
+  color: white;
+  font-family: Arial, sans-serif;
+  min-height: 100vh;
+}
+
+#root {
+  background-color: black;
+  min-height: 100vh;
+}
