@@ -14,13 +14,9 @@ function ResumeAnalyzer() {
   const [evaluating, setEvaluating] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [totalScore, setTotalScore] = useState(0);
-
-  // ✅ Voice States
   const [isListening, setIsListening] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(true);
   const [interimText, setInterimText] = useState("");
-
-  // ✅ Camera States
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState("");
 
@@ -32,17 +28,14 @@ function ResumeAnalyzer() {
   useEffect(() => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
-
     if (!SpeechRecognition) {
       setVoiceSupported(false);
       return;
     }
-
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
-
     recognition.onresult = (event) => {
       let finalTranscript = "";
       let interimTranscript = "";
@@ -53,38 +46,26 @@ function ResumeAnalyzer() {
           interimTranscript += event.results[i][0].transcript;
         }
       }
-      if (finalTranscript) setAnswer(finalTranscript.trim());
+      if (finalTranscript) setAnswer((prev) => (prev + " " + finalTranscript).trim());
       setInterimText(interimTranscript);
     };
-
     recognition.onerror = () => setIsListening(false);
     recognition.onend = () => {
       setIsListening(false);
       setInterimText("");
     };
-
     recognitionRef.current = recognition;
   }, []);
 
-  // ✅ Camera Setup
+  // ✅ Camera
   const startCamera = async () => {
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setCameraError("Camera not supported in this browser.");
-        return;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
-      });
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      if (videoRef.current) videoRef.current.srcObject = stream;
       setCameraOn(true);
-      setCameraError("");
     } catch (err) {
-      console.error("Camera error:", err);
       setCameraError("Camera permission denied.");
     }
   };
@@ -94,34 +75,33 @@ function ResumeAnalyzer() {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOn(false);
   };
 
-  // ✅ Start camera when interview starts
   useEffect(() => {
-    if (interviewStarted && !cameraOn) {
-      startCamera();
-    }
+    if (interviewStarted) startCamera();
   }, [interviewStarted]);
 
-  // ✅ Cleanup camera on unmount
   useEffect(() => {
     return () => stopCamera();
   }, []);
 
-  // ✅ Start Listening
-  const startListening = () => {
-    if (!recognitionRef.current) return;
-    setAnswer("");
-    setInterimText("");
-    recognitionRef.current.start();
-    setIsListening(true);
+  // ✅ Voice
+  const startListening = async () => {
+    if (!recognitionRef.current || isListening) return;
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      setAnswer("");
+      setInterimText("");
+      try { recognitionRef.current.abort(); } catch (e) {}
+      recognitionRef.current.start();
+      setIsListening(true);
+    } catch (error) {
+      alert("Please allow microphone permission!");
+    }
   };
 
-  // ✅ Stop Listening
   const stopListening = () => {
     if (!recognitionRef.current) return;
     recognitionRef.current.stop();
@@ -129,7 +109,7 @@ function ResumeAnalyzer() {
     setInterimText("");
   };
 
-  // ✅ Handle Resume Upload
+  // ✅ Resume Upload
   const handleResumeAnalyze = async () => {
     if (!resumeFile) {
       alert("Please select a PDF file first!");
@@ -147,29 +127,24 @@ function ResumeAnalyzer() {
       );
       setResumeResult(response.data);
     } catch (error) {
-      console.log("❌ Error:", error);
       alert("Error analyzing resume. Please try again!");
     }
     setAnalyzing(false);
   };
 
-  // ✅ Handle Answer Submission
+  // ✅ Handle Answer
   const handleNext = async () => {
     if (answer.trim() === "" && interimText.trim() === "") {
       alert("Please speak your answer first!");
       return;
     }
-
     if (isListening) stopListening();
-
     const finalAnswer = answer || interimText;
     const updatedAnswers = [...answers, finalAnswer];
     setAnswers(updatedAnswers);
     setAnswer("");
     setInterimText("");
-
     const questions = resumeResult?.interview_questions || [];
-
     if (currentQuestion < questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     } else {
@@ -187,17 +162,11 @@ function ResumeAnalyzer() {
           );
           results.push(response.data);
         } catch (error) {
-          results.push({
-            score: 0,
-            feedback: "Could not evaluate this answer",
-            correct_answer: "Please try again",
-          });
+          results.push({ score: 0, feedback: "Could not evaluate", correct_answer: "Please try again" });
         }
       }
       const total = results.reduce((sum, r) => sum + (r.score || 0), 0);
-      const outOf10 = results.length > 0
-        ? Math.round(total / results.length)
-        : 0;
+      const outOf10 = results.length > 0 ? Math.round(total / results.length) : 0;
       setEvaluations(results);
       setTotalScore(outOf10);
       stopCamera();
@@ -207,33 +176,18 @@ function ResumeAnalyzer() {
   };
 
   const questions = resumeResult?.interview_questions || [];
-  const progress = questions.length > 0
-    ? (currentQuestion / questions.length) * 100
-    : 0;
+  const progress = questions.length > 0 ? (currentQuestion / questions.length) * 100 : 0;
 
   // ============================
   // ✅ RESULTS PAGE
   // ============================
   if (showResults) {
     return (
-      <div style={{
-        minHeight: "100vh",
-        backgroundColor: "black",
-        color: "white",
-        padding: "40px",
-      }}>
-        <h1 style={{ textAlign: "center", marginBottom: "10px" }}>
-          Interview Results 🎉
-        </h1>
-        <p style={{
-          textAlign: "center",
-          color: "#00bfff",
-          fontSize: "18px",
-          marginBottom: "40px",
-        }}>
+      <div style={{ minHeight: "100vh", backgroundColor: "black", color: "white", padding: "40px" }}>
+        <h1 style={{ textAlign: "center", marginBottom: "10px" }}>Interview Results 🎉</h1>
+        <p style={{ textAlign: "center", color: "#00bfff", fontSize: "18px", marginBottom: "40px" }}>
           Resume Based Interview
         </p>
-
         {questions.map((question, index) => (
           <div key={index} style={{
             backgroundColor: "#1e1e1e",
@@ -241,25 +195,17 @@ function ResumeAnalyzer() {
             margin: "20px auto",
             width: "70%",
             borderRadius: "10px",
-            borderLeft: evaluations[index]?.score >= 5
-              ? "4px solid #00ff88"
-              : "4px solid #ff4444",
+            borderLeft: evaluations[index]?.score >= 5 ? "4px solid #00ff88" : "4px solid #ff4444",
           }}>
             <h2>Question {index + 1}</h2>
             <p><strong style={{ color: "#00bfff" }}>Question:</strong></p>
             <p>{question}</p>
             <p><strong style={{ color: "#00bfff" }}>Your Answer:</strong></p>
-            <p style={{ color: "#fff" }}>
-              {answers[index] || "❌ No Answer Provided"}
-            </p>
+            <p style={{ color: "#fff" }}>{answers[index] || "❌ No Answer Provided"}</p>
             <p>
               <strong style={{ color: "#00bfff" }}>AI Score: </strong>
               <span style={{
-                color: evaluations[index]?.score >= 7
-                  ? "#00ff88"
-                  : evaluations[index]?.score >= 4
-                  ? "#ffaa00"
-                  : "#ff4444",
+                color: evaluations[index]?.score >= 7 ? "#00ff88" : evaluations[index]?.score >= 4 ? "#ffaa00" : "#ff4444",
                 fontWeight: "bold",
                 fontSize: "18px",
               }}>
@@ -272,7 +218,6 @@ function ResumeAnalyzer() {
             <p style={{ color: "#aaffaa" }}>{evaluations[index]?.correct_answer}</p>
           </div>
         ))}
-
         <div style={{
           textAlign: "center",
           backgroundColor: "#1e1e1e",
@@ -284,11 +229,7 @@ function ResumeAnalyzer() {
           <h2>Your Total Score</h2>
           <h1 style={{
             fontSize: "60px",
-            color: totalScore >= 8
-              ? "#00ff88"
-              : totalScore >= 5
-              ? "#ffaa00"
-              : "#ff4444",
+            color: totalScore >= 8 ? "#00ff88" : totalScore >= 5 ? "#ffaa00" : "#ff4444",
           }}>
             {totalScore} / 10
           </h1>
@@ -297,17 +238,9 @@ function ResumeAnalyzer() {
           </p>
           <p style={{
             fontSize: "18px",
-            color: totalScore >= 8
-              ? "#00ff88"
-              : totalScore >= 5
-              ? "#ffaa00"
-              : "#ff4444",
+            color: totalScore >= 8 ? "#00ff88" : totalScore >= 5 ? "#ffaa00" : "#ff4444",
           }}>
-            {totalScore >= 8
-              ? "🏆 Excellent Performance!"
-              : totalScore >= 5
-              ? "👍 Good Effort! Keep Practicing!"
-              : "💪 Need More Practice!"}
+            {totalScore >= 8 ? "🏆 Excellent Performance!" : totalScore >= 5 ? "👍 Good Effort!" : "💪 Need More Practice!"}
           </p>
           <button
             onClick={() => (window.location.href = "/dashboard")}
@@ -354,12 +287,7 @@ function ResumeAnalyzer() {
           borderRadius: "50%",
           animation: "spin 1s linear infinite",
         }} />
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
@@ -369,17 +297,9 @@ function ResumeAnalyzer() {
   // ============================
   if (showTipsPage && !interviewStarted) {
     return (
-      <div style={{
-        minHeight: "100vh",
-        backgroundColor: "black",
-        color: "white",
-        padding: "40px",
-        textAlign: "center",
-      }}>
+      <div style={{ minHeight: "100vh", backgroundColor: "black", color: "white", padding: "40px", textAlign: "center" }}>
         <h1 style={{ marginBottom: "5px" }}>📄 Resume Based Interview</h1>
-        <p style={{ color: "#aaa", marginBottom: "30px" }}>
-          This is a Voice-Only interview! Speak your answers clearly.
-        </p>
+        <p style={{ color: "#aaa", marginBottom: "30px" }}>Voice-Only interview! Speak your answers clearly.</p>
 
         <div style={{
           backgroundColor: "#1a1a2e",
@@ -394,118 +314,47 @@ function ResumeAnalyzer() {
             💡 How AI Scores Your Answers
           </h2>
 
-          <div style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: "15px",
-            flexWrap: "wrap",
-            marginBottom: "25px",
-          }}>
-            <div style={{
-              backgroundColor: "#ff444422",
-              border: "1px solid #ff4444",
-              borderRadius: "10px",
-              padding: "15px",
-              flex: "1",
-              minWidth: "130px",
-              textAlign: "center",
-            }}>
-              <h2 style={{ color: "#ff4444", margin: 0 }}>0-3/10</h2>
-              <p style={{ color: "#ff4444", margin: "5px 0", fontWeight: "bold" }}>❌ Poor</p>
-              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>
-                One word or no meaningful answer
-              </p>
-            </div>
-
-            <div style={{
-              backgroundColor: "#ffaa0022",
-              border: "1px solid #ffaa00",
-              borderRadius: "10px",
-              padding: "15px",
-              flex: "1",
-              minWidth: "130px",
-              textAlign: "center",
-            }}>
-              <h2 style={{ color: "#ffaa00", margin: 0 }}>4-6/10</h2>
-              <p style={{ color: "#ffaa00", margin: "5px 0", fontWeight: "bold" }}>👍 Partial</p>
-              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>
-                Basic answer with some knowledge
-              </p>
-            </div>
-
-            <div style={{
-              backgroundColor: "#00bfff22",
-              border: "1px solid #00bfff",
-              borderRadius: "10px",
-              padding: "15px",
-              flex: "1",
-              minWidth: "130px",
-              textAlign: "center",
-            }}>
-              <h2 style={{ color: "#00bfff", margin: 0 }}>7-8/10</h2>
-              <p style={{ color: "#00bfff", margin: "5px 0", fontWeight: "bold" }}>⭐ Good</p>
-              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>
-                Clear answer with explanation
-              </p>
-            </div>
-
-            <div style={{
-              backgroundColor: "#00ff8822",
-              border: "1px solid #00ff88",
-              borderRadius: "10px",
-              padding: "15px",
-              flex: "1",
-              minWidth: "130px",
-              textAlign: "center",
-            }}>
-              <h2 style={{ color: "#00ff88", margin: 0 }}>9-10/10</h2>
-              <p style={{ color: "#00ff88", margin: "5px 0", fontWeight: "bold" }}>🏆 Excellent</p>
-              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>
-                Detailed answer with real examples
-              </p>
-            </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "15px", flexWrap: "wrap", marginBottom: "25px" }}>
+            {[
+              { range: "0-3/10", label: "❌ Poor", desc: "One word or no meaningful answer", color: "#ff4444" },
+              { range: "4-6/10", label: "👍 Partial", desc: "Basic answer with some knowledge", color: "#ffaa00" },
+              { range: "7-8/10", label: "⭐ Good", desc: "Clear answer with explanation", color: "#00bfff" },
+              { range: "9-10/10", label: "🏆 Excellent", desc: "Detailed answer with real examples", color: "#00ff88" },
+            ].map((item, i) => (
+              <div key={i} style={{
+                backgroundColor: `${item.color}22`,
+                border: `1px solid ${item.color}`,
+                borderRadius: "10px",
+                padding: "15px",
+                flex: "1",
+                minWidth: "130px",
+                textAlign: "center",
+              }}>
+                <h2 style={{ color: item.color, margin: 0 }}>{item.range}</h2>
+                <p style={{ color: item.color, margin: "5px 0", fontWeight: "bold" }}>{item.label}</p>
+                <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>{item.desc}</p>
+              </div>
+            ))}
           </div>
 
-          <div style={{
-            backgroundColor: "#ffffff11",
-            borderRadius: "10px",
-            padding: "20px",
-          }}>
-            <p style={{
-              color: "#00ff88",
-              margin: "0 0 12px 0",
-              fontWeight: "bold",
-              fontSize: "16px",
-            }}>
+          <div style={{ backgroundColor: "#ffffff11", borderRadius: "10px", padding: "20px" }}>
+            <p style={{ color: "#00ff88", margin: "0 0 12px 0", fontWeight: "bold", fontSize: "16px" }}>
               🎤 How to Use Voice Interview:
             </p>
-            <ul style={{
-              color: "#ccc",
-              margin: 0,
-              paddingLeft: "20px",
-              fontSize: "14px",
-              lineHeight: "2.2",
-            }}>
-              <li>Click <strong style={{ color: "#00ff88" }}>🎤 Start Speaking</strong> button</li>
+            <ul style={{ color: "#ccc", margin: 0, paddingLeft: "20px", fontSize: "14px", lineHeight: "2.2" }}>
+              <li>Click <strong style={{ color: "#00ff88" }}>🎤 green mic</strong> to start</li>
               <li>Allow microphone and camera permission</li>
-              <li>Speak your answer <strong style={{ color: "white" }}>clearly and loudly</strong></li>
-              <li>Your speech will appear as text on screen</li>
-              <li>Click <strong style={{ color: "#ff4444" }}>🔴 Stop</strong> when done speaking</li>
+              <li>Speak clearly — watch the <strong style={{ color: "#ff4444" }}>● REC waveform</strong></li>
+              <li>Click <strong style={{ color: "#ff4444" }}>🔴 red button</strong> when done</li>
               <li>Click <strong style={{ color: "#00bfff" }}>Next Question →</strong> to continue</li>
               <li>Use <strong style={{ color: "white" }}>Google Chrome</strong> for best results!</li>
             </ul>
           </div>
 
-          <div style={{
-            marginTop: "20px",
-            display: "flex",
-            justifyContent: "center",
-            gap: "30px",
-            flexWrap: "wrap",
-          }}>
+          <div style={{ marginTop: "20px", display: "flex", justifyContent: "center", gap: "30px" }}>
             <div style={{ textAlign: "center" }}>
               <h2 style={{ color: "#00bfff", margin: 0 }}>{questions.length}</h2>
-              <p style={{ color: "#aaa", margin: 0, fontSize: "14px" }}>Total Questions</p>
+              <p style={{ color: "#aaa", margin: 0, fontSize: "14px" }}>Questions</p>
             </div>
             <div style={{ textAlign: "center" }}>
               <h2 style={{ color: "#ffaa00", margin: 0 }}>📄</h2>
@@ -534,9 +383,7 @@ function ResumeAnalyzer() {
         >
           🚀 Start Resume Interview
         </button>
-
         <br />
-
         <button
           onClick={() => setShowTipsPage(false)}
           style={{
@@ -560,16 +407,9 @@ function ResumeAnalyzer() {
   // ============================
   if (interviewStarted) {
     return (
-      <div style={{
-        minHeight: "100vh",
-        background: "black",
-        color: "white",
-        padding: "40px",
-        textAlign: "center",
-        position: "relative",
-      }}>
+      <div style={{ minHeight: "100vh", background: "black", color: "white", padding: "40px", textAlign: "center", position: "relative" }}>
 
-        {/* ✅ Camera Preview - Top Right Fixed */}
+        {/* ✅ Camera Preview */}
         <div style={{
           position: "fixed",
           top: "20px",
@@ -582,7 +422,6 @@ function ResumeAnalyzer() {
           zIndex: 999,
           boxShadow: "0 0 15px rgba(0,0,0,0.5)",
         }}>
-          {/* Camera Status Bar */}
           <div style={{
             backgroundColor: "#000000cc",
             padding: "6px 10px",
@@ -599,32 +438,14 @@ function ResumeAnalyzer() {
                 display: "inline-block",
                 animation: cameraOn ? "blink 2s infinite" : "none",
               }} />
-              <span style={{ color: "white", fontSize: "11px" }}>
-                {cameraOn ? "● LIVE" : "○ OFF"}
-              </span>
+              <span style={{ color: "white", fontSize: "11px" }}>{cameraOn ? "● LIVE" : "○ OFF"}</span>
             </div>
             <span style={{ color: "#aaa", fontSize: "11px" }}>📷</span>
           </div>
-
-          {/* Video Feed */}
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            style={{
-              width: "100%",
-              height: "150px",
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
-
+          <video ref={videoRef} autoPlay muted playsInline style={{ width: "100%", height: "150px", objectFit: "cover", display: "block" }} />
           {cameraError && (
             <div style={{ padding: "8px", backgroundColor: "#ff444422" }}>
-              <p style={{ color: "#ff4444", margin: 0, fontSize: "11px" }}>
-                {cameraError}
-              </p>
+              <p style={{ color: "#ff4444", margin: 0, fontSize: "11px" }}>{cameraError}</p>
             </div>
           )}
         </div>
@@ -632,13 +453,7 @@ function ResumeAnalyzer() {
         <h1 style={{ marginBottom: "5px" }}>🎤 Resume Voice Interview</h1>
 
         {/* Progress Bar */}
-        <div style={{
-          width: "60%",
-          margin: "20px auto",
-          backgroundColor: "#333",
-          borderRadius: "10px",
-          height: "10px",
-        }}>
+        <div style={{ width: "60%", margin: "20px auto", backgroundColor: "#333", borderRadius: "10px", height: "10px" }}>
           <div style={{
             width: `${progress}%`,
             backgroundColor: "#00bfff",
@@ -649,136 +464,99 @@ function ResumeAnalyzer() {
         </div>
 
         {/* Question Card */}
-        <div style={{
-          background: "#1e1e1e",
-          padding: "30px",
-          borderRadius: "15px",
-          width: "60%",
-          margin: "20px auto",
-        }}>
-          <div style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "20px",
-          }}>
-            <h2 style={{ margin: 0 }}>
-              Question {currentQuestion + 1} / {questions.length}
-            </h2>
-            <span style={{
-              backgroundColor: "#00bfff",
-              color: "black",
-              padding: "4px 12px",
-              borderRadius: "20px",
-              fontWeight: "bold",
-              fontSize: "14px",
-            }}>
+        <div style={{ background: "#1e1e1e", padding: "30px", borderRadius: "15px", width: "60%", margin: "20px auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+            <h2 style={{ margin: 0 }}>Question {currentQuestion + 1} / {questions.length}</h2>
+            <span style={{ backgroundColor: "#00bfff", color: "black", padding: "4px 12px", borderRadius: "20px", fontWeight: "bold", fontSize: "14px" }}>
               Resume Based
             </span>
           </div>
 
-          <h3 style={{
-            color: "#00bfff",
-            marginBottom: "30px",
-            textAlign: "left",
-            fontSize: "20px",
-          }}>
+          <h3 style={{ color: "#00bfff", marginBottom: "30px", textAlign: "left", fontSize: "20px" }}>
             {questions[currentQuestion]}
           </h3>
 
           {/* ✅ Big Mic Button */}
           <div style={{ marginBottom: "25px" }}>
             {!isListening ? (
-              <button
-                onClick={startListening}
-                style={{
-                  width: "120px",
-                  height: "120px",
-                  borderRadius: "50%",
-                  backgroundColor: "#00ff88",
-                  color: "black",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: "40px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto",
-                  boxShadow: "0 0 20px #00ff8866",
-                }}
-              >
-                🎤
-              </button>
+              <button onClick={startListening} style={{
+                width: "120px", height: "120px", borderRadius: "50%",
+                backgroundColor: "#00ff88", color: "black", border: "none",
+                cursor: "pointer", fontSize: "40px", display: "flex",
+                alignItems: "center", justifyContent: "center", margin: "0 auto",
+                boxShadow: "0 0 20px #00ff8866",
+              }}>🎤</button>
             ) : (
-              <button
-                onClick={stopListening}
-                style={{
-                  width: "120px",
-                  height: "120px",
-                  borderRadius: "50%",
-                  backgroundColor: "#ff4444",
-                  color: "white",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: "40px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto",
-                  animation: "pulse 1s infinite",
-                  boxShadow: "0 0 20px #ff444466",
-                }}
-              >
-                🔴
-              </button>
+              <button onClick={stopListening} style={{
+                width: "120px", height: "120px", borderRadius: "50%",
+                backgroundColor: "#ff4444", color: "white", border: "none",
+                cursor: "pointer", fontSize: "40px", display: "flex",
+                alignItems: "center", justifyContent: "center", margin: "0 auto",
+                animation: "pulse 1s infinite", boxShadow: "0 0 20px #ff444466",
+              }}>🔴</button>
             )}
-
-            <p style={{
-              color: isListening ? "#00ff88" : "#aaa",
-              marginTop: "15px",
-              fontSize: "16px",
-              fontWeight: "bold",
-            }}>
-              {isListening
-                ? "🎤 Listening... Speak now!"
-                : "Click mic to start speaking"}
+            <p style={{ color: isListening ? "#00ff88" : "#aaa", marginTop: "15px", fontSize: "16px", fontWeight: "bold" }}>
+              {isListening ? "🎤 Listening... Speak now!" : "Click mic to start speaking"}
             </p>
           </div>
 
-          {/* ✅ Transcript Box */}
+          {/* ✅ Audio Waveform Visualizer */}
           <div style={{
-            backgroundColor: "#2a2a2a",
-            borderRadius: "10px",
-            padding: "20px",
-            minHeight: "120px",
+            backgroundColor: "#0a1628",
+            borderRadius: "15px",
+            padding: "25px 20px",
             marginBottom: "20px",
-            border: isListening
-              ? "2px solid #00ff88"
-              : answer
-              ? "2px solid #00bfff"
-              : "1px solid #444",
-            textAlign: "left",
+            border: isListening ? "2px solid #ff4444" : answer ? "2px solid #00bfff" : "1px solid #1e3a5f",
             transition: "all 0.3s ease",
+            minHeight: "120px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
           }}>
-            {answer && (
-              <p style={{ color: "white", margin: 0, fontSize: "16px" }}>
-                {answer}
-              </p>
+            {isListening && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "15px", width: "100%" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "3px", flex: 1 }}>
+                  {[3,5,8,12,18,22,18,25,30,25,18,22,18,12,8,12,18,22,25,22,18,12,8,5,3].map((h, i) => (
+                    <div key={i} style={{
+                      width: "5px",
+                      backgroundColor: "rgba(200,220,255,0.8)",
+                      borderRadius: "3px",
+                      animation: `waveBar ${0.4 + (i % 7) * 0.1}s ease-in-out infinite alternate`,
+                      height: `${h}px`,
+                    }} />
+                  ))}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                  <span style={{ fontSize: "30px" }}>🎙️</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <div style={{ width: "12px", height: "12px", borderRadius: "50%", backgroundColor: "#ff4444", animation: "recBlink 1s infinite" }} />
+                    <span style={{ color: "#ff4444", fontWeight: "bold", fontSize: "20px", letterSpacing: "2px" }}>REC</span>
+                  </div>
+                </div>
+              </div>
             )}
-            {interimText && (
-              <p style={{
-                color: "#aaa",
-                margin: 0,
-                fontSize: "16px",
-                fontStyle: "italic",
-              }}>
-                {interimText}
-              </p>
+
+            {interimText && isListening && (
+              <p style={{ color: "#aaa", margin: "10px 0 0 0", fontSize: "14px", fontStyle: "italic" }}>{interimText}</p>
             )}
-            {!answer && !interimText && (
-              <p style={{ color: "#555", margin: 0, fontSize: "15px" }}>
-                Your spoken answer will appear here...
-              </p>
+
+            {answer && !isListening && (
+              <div style={{ width: "100%", textAlign: "left" }}>
+                <p style={{ color: "#00ff88", margin: "0 0 10px 0", fontSize: "13px", fontWeight: "bold" }}>✅ Answer Recorded</p>
+                <p style={{ color: "white", margin: 0, fontSize: "15px", lineHeight: "1.6" }}>{answer}</p>
+              </div>
+            )}
+
+            {!isListening && !answer && !interimText && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", width: "100%" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "3px", justifyContent: "center" }}>
+                  {Array(25).fill(0).map((_, i) => (
+                    <div key={i} style={{ width: "5px", height: "4px", backgroundColor: "#1e3a5f", borderRadius: "3px" }} />
+                  ))}
+                </div>
+                <p style={{ color: "#3a5f8a", margin: 0, fontSize: "13px" }}>Click 🎤 to start recording</p>
+              </div>
             )}
           </div>
 
@@ -786,9 +564,7 @@ function ResumeAnalyzer() {
           {(answer || interimText) && (
             <p style={{
               textAlign: "right",
-              color: (answer + interimText).split(" ").length < 10
-                ? "#ff4444"
-                : "#00ff88",
+              color: (answer + interimText).split(" ").length < 10 ? "#ff4444" : "#00ff88",
               fontSize: "13px",
               marginBottom: "15px",
             }}>
@@ -814,34 +590,21 @@ function ResumeAnalyzer() {
               width: "100%",
             }}
           >
-            {currentQuestion === questions.length - 1
-              ? "🏁 Finish Interview"
-              : "Next Question →"}
+            {currentQuestion === questions.length - 1 ? "🏁 Finish Interview" : "Next Question →"}
           </button>
 
-          <div style={{
-            marginTop: "15px",
-            padding: "10px",
-            backgroundColor: "#ffffff08",
-            borderRadius: "8px",
-          }}>
+          <div style={{ marginTop: "15px", padding: "10px", backgroundColor: "#ffffff08", borderRadius: "8px" }}>
             <p style={{ color: "#666", margin: 0, fontSize: "13px" }}>
-              🎤 Click green mic → Speak → Click red stop → Click Next
+              🎤 Click green mic → Speak → Watch REC bar → Click red stop → Click Next
             </p>
           </div>
         </div>
 
         <style>{`
-          @keyframes pulse {
-            0% { transform: scale(1); box-shadow: 0 0 20px #ff444466; }
-            50% { transform: scale(1.08); box-shadow: 0 0 35px #ff4444aa; }
-            100% { transform: scale(1); box-shadow: 0 0 20px #ff444466; }
-          }
-          @keyframes blink {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; }
-            100% { opacity: 1; }
-          }
+          @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+          @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+          @keyframes waveBar { 0% { transform: scaleY(0.3); opacity: 0.6; } 100% { transform: scaleY(1.8); opacity: 1; } }
+          @keyframes recBlink { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
         `}</style>
       </div>
     );
@@ -851,50 +614,25 @@ function ResumeAnalyzer() {
   // ✅ UPLOAD PAGE
   // ============================
   return (
-    <div style={{
-      minHeight: "100vh",
-      backgroundColor: "black",
-      color: "white",
-      padding: "40px",
-    }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "black", color: "white", padding: "40px" }}>
       {!resumeResult && (
         <>
-          <h1 style={{ textAlign: "center", marginBottom: "10px" }}>
-            📄 Resume Analyzer
-          </h1>
-          <p style={{
-            textAlign: "center",
-            color: "#aaa",
-            marginBottom: "40px",
-            fontSize: "16px",
-          }}>
+          <h1 style={{ textAlign: "center", marginBottom: "10px" }}>📄 Resume Analyzer</h1>
+          <p style={{ textAlign: "center", color: "#aaa", marginBottom: "40px", fontSize: "16px" }}>
             Upload your resume and get AI-powered analysis + personalized interview questions!
           </p>
         </>
       )}
 
       {resumeResult && (
-        <h1 style={{ textAlign: "center", marginBottom: "20px" }}>
-          📄 Resume Analysis Results
-        </h1>
+        <h1 style={{ textAlign: "center", marginBottom: "20px" }}>📄 Resume Analysis Results</h1>
       )}
 
       {resumeResult && (
         <div style={{ textAlign: "center", marginBottom: "20px" }}>
           <button
-            onClick={() => {
-              setResumeResult(null);
-              setResumeFile(null);
-            }}
-            style={{
-              padding: "8px 20px",
-              backgroundColor: "#1e1e1e",
-              color: "#aaa",
-              border: "1px solid #444",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontSize: "14px",
-            }}
+            onClick={() => { setResumeResult(null); setResumeFile(null); }}
+            style={{ padding: "8px 20px", backgroundColor: "#1e1e1e", color: "#aaa", border: "1px solid #444", borderRadius: "8px", cursor: "pointer", fontSize: "14px" }}
           >
             🔄 Analyze Another Resume
           </button>
@@ -912,24 +650,15 @@ function ResumeAnalyzer() {
           borderTop: "4px solid #00bfff",
         }}>
           <h2 style={{ marginBottom: "20px" }}>📂 Upload Your Resume</h2>
-
           <input
             type="file"
             accept=".pdf"
             onChange={(e) => setResumeFile(e.target.files[0])}
-            style={{
-              color: "white",
-              display: "block",
-              margin: "0 auto 20px auto",
-            }}
+            style={{ color: "white", display: "block", margin: "0 auto 20px auto" }}
           />
-
           {resumeFile && (
-            <p style={{ color: "#00ff88", marginBottom: "15px" }}>
-              ✅ File selected: {resumeFile.name}
-            </p>
+            <p style={{ color: "#00ff88", marginBottom: "15px" }}>✅ File selected: {resumeFile.name}</p>
           )}
-
           <button
             onClick={handleResumeAnalyze}
             disabled={analyzing}
@@ -949,39 +678,24 @@ function ResumeAnalyzer() {
       )}
 
       {resumeResult && (
-        <div style={{
-          backgroundColor: "#1e1e1e",
-          borderRadius: "15px",
-          padding: "35px",
-          margin: "0 auto",
-          width: "60%",
-        }}>
-          {/* Skills */}
+        <div style={{ backgroundColor: "#1e1e1e", borderRadius: "15px", padding: "35px", margin: "0 auto", width: "60%" }}>
+
           <div style={{ marginBottom: "25px" }}>
             <h3 style={{ color: "#00bfff", marginBottom: "12px" }}>✅ Skills Found</h3>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
               {resumeResult.skills?.map((skill, i) => (
-                <span key={i} style={{
-                  backgroundColor: "#00bfff22",
-                  color: "#00bfff",
-                  padding: "5px 12px",
-                  borderRadius: "20px",
-                  fontSize: "14px",
-                  border: "1px solid #00bfff",
-                }}>
+                <span key={i} style={{ backgroundColor: "#00bfff22", color: "#00bfff", padding: "5px 12px", borderRadius: "20px", fontSize: "14px", border: "1px solid #00bfff" }}>
                   {skill}
                 </span>
               ))}
             </div>
           </div>
 
-          {/* Experience */}
           <div style={{ marginBottom: "25px" }}>
             <h3 style={{ color: "#00bfff", marginBottom: "12px" }}>💼 Experience</h3>
             <p style={{ color: "#ccc" }}>{resumeResult.experience}</p>
           </div>
 
-          {/* Projects */}
           <div style={{ marginBottom: "25px" }}>
             <h3 style={{ color: "#00bfff", marginBottom: "12px" }}>🚀 Projects</h3>
             <ul style={{ color: "#ccc", paddingLeft: "20px" }}>
@@ -991,32 +705,22 @@ function ResumeAnalyzer() {
             </ul>
           </div>
 
-          {/* Missing Skills */}
           <div style={{ marginBottom: "25px" }}>
             <h3 style={{ color: "#ff4444", marginBottom: "12px" }}>⚠️ Missing Skills</h3>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
               {resumeResult.missing_skills?.map((skill, i) => (
-                <span key={i} style={{
-                  backgroundColor: "#ff444422",
-                  color: "#ff4444",
-                  padding: "5px 12px",
-                  borderRadius: "20px",
-                  fontSize: "14px",
-                  border: "1px solid #ff4444",
-                }}>
+                <span key={i} style={{ backgroundColor: "#ff444422", color: "#ff4444", padding: "5px 12px", borderRadius: "20px", fontSize: "14px", border: "1px solid #ff4444" }}>
                   {skill}
                 </span>
               ))}
             </div>
           </div>
 
-          {/* Suggestions */}
           <div style={{ marginBottom: "25px" }}>
             <h3 style={{ color: "#ffaa00", marginBottom: "12px" }}>💡 AI Suggestions</h3>
             <p style={{ color: "#ccc" }}>{resumeResult.suggestions}</p>
           </div>
 
-          {/* Interview Questions */}
           <div style={{ marginBottom: "25px" }}>
             <h3 style={{ color: "#00ff88", marginBottom: "12px" }}>
               🎯 Personalized Interview Questions ({questions.length})
@@ -1028,7 +732,6 @@ function ResumeAnalyzer() {
             </ol>
           </div>
 
-          {/* Start Interview Button */}
           <div style={{ textAlign: "center" }}>
             <button
               onClick={() => setShowTipsPage(true)}

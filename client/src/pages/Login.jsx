@@ -5,13 +5,15 @@ function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const response = await axios.post(
-  "https://interviewmate-ai-55g6.onrender.com/api/auth/login",
-  {
-    email,
-    password,
-  }
-);
+  const handleLogin = async () => {
+    try {
+      const response = await axios.post(
+        "http://localhost:5000/api/auth/login",
+        {
+          email,
+          password,
+        }
+      );
 
       alert(response.data.message);
 

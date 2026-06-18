@@ -37,7 +37,6 @@ const questionBank = {
     "Explain regression analysis and when to use it.",
     "What are window functions in SQL? Give examples.",
   ],
-  
 };
 
 function Interview() {
@@ -54,7 +53,6 @@ function Interview() {
   const [interimText, setInterimText] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState("");
-  const [voiceError, setVoiceError] = useState("");
 
   const recognitionRef = useRef(null);
   const videoRef = useRef(null);
@@ -85,40 +83,21 @@ function Interview() {
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
     recognition.lang = "en-US";
     recognition.onresult = (event) => {
       let finalTranscript = "";
       let interimTranscript = "";
-
       for (let i = 0; i < event.results.length; i++) {
-        const transcript = event.results[i][0]?.transcript || "";
         if (event.results[i].isFinal) {
-          finalTranscript += transcript + " ";
+          finalTranscript += event.results[i][0].transcript + " ";
         } else {
-          interimTranscript += transcript;
+          interimTranscript += event.results[i][0].transcript;
         }
       }
-
-      if (finalTranscript) {
-        setAnswer((prev) => (prev + " " + finalTranscript).trim());
-      }
-      setInterimText(interimTranscript.trim());
+      if (finalTranscript) setAnswer((prev) => (prev + " " + finalTranscript).trim());
+      setInterimText(interimTranscript);
     };
-    recognition.onstart = () => {
-      setIsListening(true);
-      setVoiceError("");
-    };
-    recognition.onerror = (event) => {
-      setIsListening(false);
-      const message =
-        event.error === "not-allowed"
-          ? "Microphone permission was denied. Please allow microphone access and try again."
-          : event.error === "no-speech"
-          ? "No speech detected. Please try speaking louder or closer to the microphone."
-          : "Voice recording failed. Please refresh and try again.";
-      setVoiceError(message);
-    };
+    recognition.onerror = () => setIsListening(false);
     recognition.onend = () => {
       setIsListening(false);
       setInterimText("");
@@ -129,20 +108,11 @@ function Interview() {
   // ✅ Camera Setup
   const startCamera = async () => {
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setCameraError("Camera not supported.");
-        return;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
-      });
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      if (videoRef.current) videoRef.current.srcObject = stream;
       setCameraOn(true);
-      setCameraError("");
     } catch (err) {
       setCameraError("Camera permission denied.");
     }
@@ -153,59 +123,30 @@ function Interview() {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOn(false);
   };
 
-  // Start the camera preview when the interview view opens.
   useEffect(() => {
-    if (showInterview && !cameraOn) {
-      startCamera();
-    }
-  }, [showInterview, cameraOn]);
+    if (showInterview) startCamera();
+  }, [showInterview]);
 
-  // ✅ Cleanup
   useEffect(() => {
     return () => stopCamera();
   }, []);
 
   // ✅ Start Listening
   const startListening = async () => {
-    if (isListening) return;
-
-    if (!recognitionRef.current) {
-      setVoiceError("Voice recognition is not supported in this browser. Please use Chrome or Edge.");
-      return;
-    }
-
+    if (!recognitionRef.current || isListening) return;
     try {
-      if (navigator.permissions && navigator.permissions.query) {
-        const permission = await navigator.permissions.query({ name: "microphone" });
-        if (permission.state === "denied") {
-          setVoiceError("Microphone is blocked in this browser session. Please open this page in a real Chrome or Edge browser and allow microphone access.");
-          setIsListening(false);
-          return;
-        }
-      }
-
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-      }
-      setVoiceError("");
+      await navigator.mediaDevices.getUserMedia({ audio: true });
       setAnswer("");
       setInterimText("");
-      try {
-        recognitionRef.current.abort();
-      } catch (error) {
-        // Ignore stale recognition state errors.
-      }
+      try { recognitionRef.current.abort(); } catch (e) {}
       recognitionRef.current.start();
+      setIsListening(true);
     } catch (error) {
-      console.error("Microphone permission error:", error);
-      setVoiceError("Microphone permission is required for voice recording. Please open this page in Chrome or Edge and allow microphone access, then try again.");
-      setIsListening(false);
+      alert("Please allow microphone permission!");
     }
   };
 
@@ -290,9 +231,7 @@ function Interview() {
             }}>
               <h2 style={{ color: "#ff4444", margin: 0 }}>0-3/10</h2>
               <p style={{ color: "#ff4444", margin: "5px 0", fontWeight: "bold" }}>❌ Poor</p>
-              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>
-                One word or no meaningful answer
-              </p>
+              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>One word or no meaningful answer</p>
             </div>
 
             <div style={{
@@ -306,9 +245,7 @@ function Interview() {
             }}>
               <h2 style={{ color: "#ffaa00", margin: 0 }}>4-6/10</h2>
               <p style={{ color: "#ffaa00", margin: "5px 0", fontWeight: "bold" }}>👍 Partial</p>
-              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>
-                Basic answer with some knowledge
-              </p>
+              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>Basic answer with some knowledge</p>
             </div>
 
             <div style={{
@@ -322,9 +259,7 @@ function Interview() {
             }}>
               <h2 style={{ color: "#00bfff", margin: 0 }}>7-8/10</h2>
               <p style={{ color: "#00bfff", margin: "5px 0", fontWeight: "bold" }}>⭐ Good</p>
-              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>
-                Clear answer with explanation
-              </p>
+              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>Clear answer with explanation</p>
             </div>
 
             <div style={{
@@ -338,49 +273,26 @@ function Interview() {
             }}>
               <h2 style={{ color: "#00ff88", margin: 0 }}>9-10/10</h2>
               <p style={{ color: "#00ff88", margin: "5px 0", fontWeight: "bold" }}>🏆 Excellent</p>
-              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>
-                Detailed answer with examples
-              </p>
+              <p style={{ color: "#aaa", fontSize: "13px", margin: 0 }}>Detailed answer with examples</p>
             </div>
           </div>
 
-          <div style={{
-            backgroundColor: "#ffffff11",
-            borderRadius: "10px",
-            padding: "20px",
-          }}>
-            <p style={{
-              color: "#00ff88",
-              margin: "0 0 12px 0",
-              fontWeight: "bold",
-              fontSize: "16px",
-            }}>
+          <div style={{ backgroundColor: "#ffffff11", borderRadius: "10px", padding: "20px" }}>
+            <p style={{ color: "#00ff88", margin: "0 0 12px 0", fontWeight: "bold", fontSize: "16px" }}>
               🎤 How to Use Voice Interview:
             </p>
-            <ul style={{
-              color: "#ccc",
-              margin: 0,
-              paddingLeft: "20px",
-              fontSize: "14px",
-              lineHeight: "2.2",
-            }}>
+            <ul style={{ color: "#ccc", margin: 0, paddingLeft: "20px", fontSize: "14px", lineHeight: "2.2" }}>
               <li>Click <strong style={{ color: "#00ff88" }}>🎤 green mic button</strong> to start</li>
               <li>Allow microphone and camera permission</li>
               <li>Speak your answer <strong style={{ color: "white" }}>clearly and loudly</strong></li>
-              <li>Your speech will appear as text on screen</li>
-              <li>Click <strong style={{ color: "#ff4444" }}>🔴 red button</strong> when done speaking</li>
+              <li>Watch the <strong style={{ color: "#ff4444" }}>● REC waveform</strong> while speaking</li>
+              <li>Click <strong style={{ color: "#ff4444" }}>🔴 red button</strong> when done</li>
               <li>Click <strong style={{ color: "#00bfff" }}>Next Question →</strong> to continue</li>
               <li>Use <strong style={{ color: "white" }}>Google Chrome</strong> for best results!</li>
             </ul>
           </div>
 
-          <div style={{
-            marginTop: "20px",
-            display: "flex",
-            justifyContent: "center",
-            gap: "30px",
-            flexWrap: "wrap",
-          }}>
+          <div style={{ marginTop: "20px", display: "flex", justifyContent: "center", gap: "30px", flexWrap: "wrap" }}>
             <div style={{ textAlign: "center" }}>
               <h2 style={{ color: "#00bfff", margin: 0 }}>{questions.length}</h2>
               <p style={{ color: "#aaa", margin: 0, fontSize: "14px" }}>Total Questions</p>
@@ -410,20 +322,6 @@ function Interview() {
             </p>
           </div>
         )}
-
-        <div style={{
-          backgroundColor: "#111827",
-          border: "1px solid #374151",
-          borderRadius: "10px",
-          padding: "14px 16px",
-          width: "65%",
-          margin: "0 auto 18px auto",
-          color: "#f3f4f6",
-          textAlign: "left",
-          fontSize: "14px",
-        }}>
-          ⚠️ Microphone recording works only in a real Chrome or Edge browser tab. The VS Code embedded page cannot ask for microphone permission here.
-        </div>
 
         <button
           onClick={() => setShowInterview(true)}
@@ -503,6 +401,7 @@ function Interview() {
               borderRadius: "50%",
               backgroundColor: cameraOn ? "#00ff88" : "#ff4444",
               display: "inline-block",
+              animation: cameraOn ? "blink 2s infinite" : "none",
             }} />
             <span style={{ color: "white", fontSize: "11px" }}>
               {cameraOn ? "● LIVE" : "○ OFF"}
@@ -510,43 +409,16 @@ function Interview() {
           </div>
           <span style={{ color: "#aaa", fontSize: "11px" }}>📷</span>
         </div>
-
-        {!cameraOn && (
-          <button
-            onClick={startCamera}
-            style={{
-              width: "100%",
-              padding: "8px 10px",
-              backgroundColor: "#00bfff",
-              color: "white",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: "bold",
-            }}
-          >
-            📷 Turn on Camera
-          </button>
-        )}
-
         <video
           ref={videoRef}
           autoPlay
           muted
           playsInline
-          style={{
-            width: "100%",
-            height: "150px",
-            objectFit: "cover",
-            display: "block",
-          }}
+          style={{ width: "100%", height: "150px", objectFit: "cover", display: "block" }}
         />
-
         {cameraError && (
           <div style={{ padding: "8px", backgroundColor: "#ff444422" }}>
-            <p style={{ color: "#ff4444", margin: 0, fontSize: "11px" }}>
-              {cameraError}
-            </p>
+            <p style={{ color: "#ff4444", margin: 0, fontSize: "11px" }}>{cameraError}</p>
           </div>
         )}
       </div>
@@ -601,12 +473,7 @@ function Interview() {
           </span>
         </div>
 
-        <h3 style={{
-          color: "#00bfff",
-          marginBottom: "30px",
-          textAlign: "left",
-          fontSize: "20px",
-        }}>
+        <h3 style={{ color: "#00bfff", marginBottom: "30px", textAlign: "left", fontSize: "20px" }}>
           {questions[currentQuestion]}
         </h3>
 
@@ -665,47 +532,103 @@ function Interview() {
           }}>
             {isListening ? "🎤 Listening... Speak now!" : "Click mic to start speaking"}
           </p>
-          {voiceError && (
-            <p style={{ color: "#ff9999", marginTop: "8px", fontSize: "13px" }}>
-              {voiceError}
-            </p>
-          )}
         </div>
 
-        {/* ✅ Transcript Box */}
+        {/* ✅ Audio Waveform Visualizer */}
         <div style={{
-          backgroundColor: "#2a2a2a",
-          borderRadius: "10px",
-          padding: "20px",
-          minHeight: "120px",
+          backgroundColor: "#0a1628",
+          borderRadius: "15px",
+          padding: "25px 20px",
           marginBottom: "20px",
           border: isListening
-            ? "2px solid #00ff88"
+            ? "2px solid #ff4444"
             : answer
             ? "2px solid #00bfff"
-            : "1px solid #444",
-          textAlign: "left",
+            : "1px solid #1e3a5f",
           transition: "all 0.3s ease",
+          minHeight: "120px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
         }}>
-          {answer && (
-            <p style={{ color: "white", margin: 0, fontSize: "16px" }}>
-              {answer}
-            </p>
-          )}
-          {interimText && (
-            <p style={{
-              color: "#aaa",
-              margin: 0,
-              fontSize: "16px",
-              fontStyle: "italic",
+
+          {/* Recording waveform */}
+          {isListening && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "15px",
+              width: "100%",
             }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "3px", flex: 1 }}>
+                {[3,5,8,12,18,22,18,25,30,25,18,22,18,12,8,12,18,22,25,22,18,12,8,5,3].map((h, i) => (
+                  <div key={i} style={{
+                    width: "5px",
+                    backgroundColor: "rgba(200,220,255,0.8)",
+                    borderRadius: "3px",
+                    animation: `waveBar ${0.4 + (i % 7) * 0.1}s ease-in-out infinite alternate`,
+                    height: `${h}px`,
+                  }} />
+                ))}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                <span style={{ fontSize: "30px" }}>🎙️</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <div style={{
+                    width: "12px",
+                    height: "12px",
+                    borderRadius: "50%",
+                    backgroundColor: "#ff4444",
+                    animation: "recBlink 1s infinite",
+                  }} />
+                  <span style={{ color: "#ff4444", fontWeight: "bold", fontSize: "20px", letterSpacing: "2px" }}>
+                    REC
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Interim text */}
+          {interimText && isListening && (
+            <p style={{ color: "#aaa", margin: "10px 0 0 0", fontSize: "14px", fontStyle: "italic" }}>
               {interimText}
             </p>
           )}
-          {!answer && !interimText && (
-            <p style={{ color: "#555", margin: 0, fontSize: "15px" }}>
-              Your spoken answer will appear here...
-            </p>
+
+          {/* Answer after recording */}
+          {answer && !isListening && (
+            <div style={{ width: "100%", textAlign: "left" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                <p style={{ color: "#00ff88", margin: 0, fontSize: "13px", fontWeight: "bold" }}>
+                  ✅ Answer Recorded
+                </p>
+              </div>
+              <p style={{ color: "white", margin: 0, fontSize: "15px", lineHeight: "1.6" }}>
+                {answer}
+              </p>
+            </div>
+          )}
+
+          {/* Idle flat line */}
+          {!isListening && !answer && !interimText && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", width: "100%" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "3px", justifyContent: "center" }}>
+                {Array(25).fill(0).map((_, i) => (
+                  <div key={i} style={{
+                    width: "5px",
+                    height: "4px",
+                    backgroundColor: "#1e3a5f",
+                    borderRadius: "3px",
+                  }} />
+                ))}
+              </div>
+              <p style={{ color: "#3a5f8a", margin: 0, fontSize: "13px" }}>
+                Click 🎤 to start recording
+              </p>
+            </div>
           )}
         </div>
 
@@ -713,9 +636,7 @@ function Interview() {
         {(answer || interimText) && (
           <p style={{
             textAlign: "right",
-            color: (answer + interimText).split(" ").length < 10
-              ? "#ff4444"
-              : "#00ff88",
+            color: (answer + interimText).split(" ").length < 10 ? "#ff4444" : "#00ff88",
             fontSize: "13px",
             marginBottom: "15px",
           }}>
@@ -741,19 +662,12 @@ function Interview() {
             width: "100%",
           }}
         >
-          {currentQuestion === questions.length - 1
-            ? "🏁 Finish Interview"
-            : "Next Question →"}
+          {currentQuestion === questions.length - 1 ? "🏁 Finish Interview" : "Next Question →"}
         </button>
 
-        <div style={{
-          marginTop: "15px",
-          padding: "10px",
-          backgroundColor: "#ffffff08",
-          borderRadius: "8px",
-        }}>
+        <div style={{ marginTop: "15px", padding: "10px", backgroundColor: "#ffffff08", borderRadius: "8px" }}>
           <p style={{ color: "#666", margin: 0, fontSize: "13px" }}>
-            🎤 Click green mic → Speak → Click red stop → Click Next
+            🎤 Click green mic → Speak → Watch REC bar → Click red stop → Click Next
           </p>
         </div>
       </div>
@@ -767,6 +681,15 @@ function Interview() {
         @keyframes blink {
           0% { opacity: 1; }
           50% { opacity: 0.3; }
+          100% { opacity: 1; }
+        }
+        @keyframes waveBar {
+          0% { transform: scaleY(0.3); opacity: 0.6; }
+          100% { transform: scaleY(1.8); opacity: 1; }
+        }
+        @keyframes recBlink {
+          0% { opacity: 1; }
+          50% { opacity: 0.2; }
           100% { opacity: 1; }
         }
       `}</style>

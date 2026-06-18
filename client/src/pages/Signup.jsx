@@ -9,7 +9,7 @@ function Signup() {
   const handleSignup = async () => {
     try {
       const response = await axios.post(
-        "https://interviewmate-ai-55g6.onrender.com/api/auth/signup"
+        "http://localhost:5000/api/auth/signup",
         {
           name,
           email,
